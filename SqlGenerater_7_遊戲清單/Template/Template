@@ -1,0 +1,54 @@
+﻿USE [CasinoDataCenter]
+GO
+
+------ 刪掉舊的遊戲清單資料
+DECLARE @GameSupplierType INT=@GameSupplierType@
+
+DELETE FROM [GameDefinitionImageTrace] WHERE [GameDefId] IN (SELECT [Id] FROM [GameDefinition] WHERE [GameSupplierType]=@GameSupplierType)
+DELETE FROM [GameDefinitionGameId] WHERE [GameDefId] IN (SELECT [Id] FROM [GameDefinition] WHERE [GameSupplierType]=@GameSupplierType)
+DELETE FROM [GameDefinitionCategory] WHERE [GameDefId] IN (SELECT [Id] FROM [GameDefinition] WHERE [GameSupplierType]=@GameSupplierType)
+DELETE FROM [GameDefinition] WHERE [GameSupplierType]=@GameSupplierType
+GO
+
+------ 新增 遊戲清單 資料
+
+DECLARE @GameSupplierType INT=@GameSupplierType@
+
+-- 如果已經有一筆資料就中斷，請檢查是否重複新增
+IF EXISTS (SELECT TOP (1) 1 FROM [GameDefinition] WHERE GameSupplierType=@GameSupplierType)
+	BEGIN
+		PRINT'GAMELIST DATA EXIST! PLEASE CHECK AGAIN!'
+	END
+ELSE
+	BEGIN
+		-- 全部包成一個交易
+		BEGIN TRAN
+
+		-- 找出目前最大 GameDefinition.Id
+		DECLARE @maxDefinitionId smallint=(SELECT MAX([Id]) FROM [GameDefinition])
+
+		----[GameDefinition]
+		SET IDENTITY_INSERT [GameDefinition] ON;
+
+@GameDefinition@
+
+
+		SET IDENTITY_INSERT [GameDefinition] OFF;
+		----[GameDefinition] END
+
+--全部遊戲
+		----[GameDefinitionCategory]
+@GameDefinitionCategory@
+		----[GameDefinitionCategory] END
+
+		----[GameDefinitionGameId]
+@GameDefinitionGameId@
+		----[GameDefinitionGameId] END
+
+		----[GameDefinitionImageTrace]
+@GameDefinitionImageTrace@
+		----[GameDefinitionImageTrace] END
+
+		COMMIT
+	END
+------ 遊戲清單 END

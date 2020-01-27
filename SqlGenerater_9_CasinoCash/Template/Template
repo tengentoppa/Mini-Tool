@@ -1,0 +1,138 @@
+﻿
+---- 刪掉 GameType 舊資料(如果有)
+DELETE FROM GameType WHERE GameSupplierType=@GameSupplierType@
+GO
+
+
+---- 注單 RawData
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[@BetRecordRawDataTable@](
+	[Id] [bigint] IDENTITY(1,1) NOT FOR REPLICATION NOT NULL,	
+@BetRecordRawColumn@	
+	[UpdatePayoffTime] [datetime] DEFAULT ('2000-01-01 00:00:00.000') NOT NULL,
+	CONSTRAINT [PK_@BetRecordRawDataTable@] PRIMARY KEY CLUSTERED 
+	(
+		[Id] ASC,
+		[UpdatePayoffTime] ASC
+	)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON),
+	UNIQUE NONCLUSTERED 
+	(
+		@MainID@ DESC
+	)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+)
+GO
+
+
+-- 注單SP
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+
+CREATE PROCEDURE [dbo].[SSPChange_@BetRecordRawDataTable@]
+	@MemberId int, 
+	@WagersTime datetime, 
+	@GameTypeId smallint, 
+	@BetAmount decimal(18,2), 
+	@Payoff decimal(18,2), 
+	@Commissionable decimal(18,2), 
+	@UpdatePayoffTime datetime,
+	@RawDataType tinyint,
+----	
+@SSPChangeInput@
+----
+	@Message nvarchar(120) = NULL OUTPUT,
+	@BoutDate datetime =NULL 
+
+AS
+BEGIN
+
+	SET NOCOUNT ON;
+
+	DECLARE @Message_BetRecord nvarchar(30)
+
+	DECLARE @Raw@MainID@ bigint, @Id bigint, 
+@SSPChangeTemp@
+	@R_UpdatePayoffTime datetime, @_DATE DATETIME = CONVERT(CHAR(8),DATEADD(M,-1,DATEADD(hh,-4,GETUTCDATE())),111)+'01'
+
+	IF ISNULL(@@MainID@,'')<>''
+		BEGIN
+			
+		IF EXISTS(SELECT Id FROM dbo.@BetRecordRawDataTable@ WHERE @MainID@=@@MainID@ and UpdatePayoffTime ='2000/01/01 00:00:00')
+			SELECT @Id=Id,
+@SSPChangeTable2Temp@
+			FROM [dbo].@BetRecordRawDataTable@ WHERE @MainID@=@@MainID@ AND UpdatePayoffTime ='2000/01/01 00:00:00'
+		ELSE
+			SELECT @Id=Id,
+@SSPChangeTable2Temp@
+			FROM [dbo].@BetRecordRawDataTable@ WHERE @MainID@=@@MainID@ AND UpdatePayoffTime >= @_DATE
+		END
+
+	BEGIN TRANSACTION
+	DECLARE @ERROR INT
+
+	IF ISNULL(@@MainID@,'')='' 
+@SSPCheckInputNullValue@
+		BEGIN		
+		SET @ERROR = 13
+		SET @Message = ISNULL(@@MainID@,'')+'('+CONVERT(NVARCHAR(20),ISNULL(@MemberId,0)) +')' GOTO ERR 
+		END
+	ELSE
+		BEGIN
+	
+		IF ISNULL(@Id,'')=''
+			BEGIN
+			IF @WagersTime >= @_DATE
+				BEGIN
+				SET @R_UpdatePayoffTime = CASE WHEN @Payoff IS NULL THEN '2000/01/01 00:00:00' ELSE @UpdatePayoffTime END 
+
+				INSERT INTO @BetRecordRawDataTable@	(
+@SSPChangeGetColumns@
+				UpdatePayoffTime)
+				VALUES (
+@SSPChangeSetValues@
+				@R_UpdatePayoffTime)
+								
+				SET @Raw@MainID@ = (SELECT SCOPE_IDENTITY())
+				END
+			END
+		ELSE
+			BEGIN
+
+			IF NOT (
+@SSPChangeCompareTmpNInput@
+				)
+					
+				 UPDATE @BetRecordRawDataTable@ SET
+@SSPChangeUpdateTable@
+				 WHERE @MainID@=@@MainID@
+
+			SET @Raw@MainID@=@Id
+			END
+		END
+
+	SET @ERROR = @@ERROR IF @ERROR>0 BEGIN SET @Message = ISNULL(@@MainID@,'')+'('+CONVERT(NVARCHAR(20),ISNULL(@MemberId,0)) +')' GOTO ERR END
+
+	IF ISNULL(@Raw@MainID@,'')<> ''
+		BEGIN
+		EXEC dbo.[SSPChange_BetRecordS] @MemberId, @WagersTime, @GameTypeId, @BetAmount, @Payoff, @Commissionable, @RawDataType, @Raw@MainID@, @UpdatePayoffTime, @BoutDate, @Message_BetRecord OUTPUT
+		SET @ERROR = @@ERROR IF @ERROR>0 OR ISNULL(@Message_BetRecord,'')<>'' BEGIN SET @Message = @Message_BetRecord GOTO ERR END
+		END 
+
+	COMMIT TRANSACTION
+
+END
+
+ ERR:
+	IF @ERROR>0 
+	BEGIN
+	ROLLBACK TRANSACTION
+	PRINT @Message
+	END  
+
+---------------------- ☆ DB CasinoCash END ☆ ----------------------
