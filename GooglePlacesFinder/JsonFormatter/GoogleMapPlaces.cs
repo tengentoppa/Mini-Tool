@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,41 +8,60 @@ namespace GooglePlacesFinder.JsonFormatter
 {
     class GoogleMapPlaceList
     {
-        public string[] html_attributions;
-        public string next_page_token;
-        public GoogleMapPlace[] results;
+        [JsonProperty("html_attributions")]
+        public string[] HtmlAttributions { get; set; }
+        [JsonProperty("next_page_token")]
+        public string NextPageToken { get; set; }
+        public GoogleMapPlace[] Results { get; set; }
 
         public override string ToString()
         {
-            return $"{string.Join("\n", results.Select(t => t.ToString()))}";
+            return $"{string.Join("\n", Results.Select(t => t.ToString()))}";
         }
     }
     class GoogleMapPlace
     {
-        public string id;
-        public string name;
-        public string vicinity;
-        public GoogleMapPhotos[] photos;
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Vicinity { get; set; }
+        public Geometry Geometry { get; set; }
+        public GoogleMapPhotos[] Photos { get; set; }
+        public string Rating { get; set; }
         public override string ToString()
         {
             return
-                $"{id}," +
-                $"{name}," +
-                $"{vicinity.Replace(',', ' ')}," +
-                $"{string.Join("|", (photos ?? new GoogleMapPhotos[] { new GoogleMapPhotos { height = 0, width = 0, photo_reference = "" } }).Select(t => t.ToString()))}";
+                $"{Id}," +
+                $"{Name}," +
+                $"{Vicinity.Replace(',', ' ')}," +
+                $"{Geometry.Location.Latitude}," +
+                $"{Geometry.Location.Longitude}," +
+                $"{Rating}," +
+                $"{string.Join("|", (Photos ?? new GoogleMapPhotos[] { new GoogleMapPhotos { Height = 0, Width = 0, PhotoReference = "" } }).Select(t => t.ToString()))}";
         }
+    }
+    class Geometry
+    {
+        public GoogleMapLocation Location { get; set; }
+    }
+    class GoogleMapLocation
+    {
+        [JsonProperty("lat")]
+        public double Latitude { get; set; }
+        [JsonProperty("lng")]
+        public double Longitude { get; set; }
     }
     class GoogleMapPhotos
     {
-        public int height;
-        public int width;
-        public string photo_reference;
+        public int Height { get; set; }
+        public int Width { get; set; }
+        [JsonProperty("photo_reference")]
+        public string PhotoReference { get; set; }
         public override string ToString()
         {
             return
-                $"{height}h" +
-                $"{width}w" +
-                $"{photo_reference}";
+                $"{Height}h" +
+                $"{Width}w" +
+                $"{PhotoReference}";
         }
     }
 }
