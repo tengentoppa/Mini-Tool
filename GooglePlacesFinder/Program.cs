@@ -1,81 +1,79 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
 using Newtonsoft.Json;
-using GooglePlacesFinder.JsonFormatter;
-using System.Drawing;
 using System.Threading;
+using GooglePlacesFinder.Model;
+using Microsoft.Extensions.Configuration;
 
 namespace GooglePlacesFinder
 {
     class Program
     {
-        class Info
+        const string nc = "\t";
+        static Config config;
+        static Config Config
         {
-            public string Token { get; set; } = "AIzaSyDk1J6Z3djT6xcgswKTG-_QnRtodQWadWM";
-            public string KeyWord { get; set; } = "yoga";
-            public string Location { get; set; } = "25.069963,121.573246";
-            public double Radius { get; set; } = 20000;        //meter
+            get
+            {
+                if (config == null)
+                {
+                    config = ReadFromAppSettings().Get<Config>();
+                }
+                return config;
+            }
+            set { config = value; }
         }
-        static Info info = new Info();
         const string FilePath = "";
+        static IConfigurationRoot ReadFromAppSettings()
+        {
+            return new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsetting.json", false)
+                .Build();
+        }
         static void Main(string[] args)
         {
-            var fileName = DateTime.Now.ToString("yyyyMMdd HHmmss") + ".csv";
-            var result = $"ID,Name,Vicinity,Latitude,Longitude,Rating,Photos\n";
-            var pageToken = "";
-
-            do
-            {
-                var uri = new Uri($"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={info.Location}&radius={info.Radius}&keyword={info.KeyWord}&key={info.Token}{pageToken}");
-                var json = GetPlacesByJson(uri);
-                Console.WriteLine(json);
-                var data = JsonConvert.DeserializeObject<GoogleMapPlaceList>(json);
-
-                result += data.ToString() + "\n";
-
-                pageToken = data.NextPageToken;
-                Console.WriteLine(data);
-                SpinWait.SpinUntil(() => false, 2000);
-            } while (!string.IsNullOrEmpty(pageToken));
-            File.AppendAllText(FilePath + fileName, result);
-
-            Console.WriteLine(result);
-
-            Console.WriteLine($"Version:{System.Reflection.Assembly.GetEntryAssembly().GetName().Version}, Jobs done.");
-
-            Console.WriteLine("Press any key to leave.");
+            Run();
+            Console.WriteLine($"Version:{System.Reflection.Assembly.GetEntryAssembly().GetName().Version}");
+            Console.WriteLine("Press Enter to leave.");
             Console.ReadLine();
         }
 
-        static string GetPlacesByJson(Uri uri, string pageToken = "")
+        static void Run()
         {
-            string rspString = "";
-            if (!string.IsNullOrEmpty(pageToken)) { pageToken = $"&pagetoken={pageToken}"; }
-            using (HttpClient client = new HttpClient())
+            var configCheck = Config.CheckContent();
+            if (!configCheck.checkSuccess) { Console.WriteLine("config empty part: " + string.Join("|", configCheck.emptyPart)); return; }
+
+            var fileName = DateTime.Now.ToString("yyyyMMdd HHmmss") + ".csv";
+            var result = $"PlaceId{nc}Name{nc}Compound Code{nc}Address{nc}Phone Number{nc}Website{nc}Latitude{nc}Longitude{nc}Rating{nc}User Ratings Total{nc}Opeing WeekDay{nc}Photos\n";
+            var pageToken = "";
+            var placeList = new List<GoogleMapPlace>();
+
+            do
             {
-                rspString = client.GetAsync(uri)
-                    .Result
-                    .Content
-                    .ReadAsStringAsync()
-                    .Result;
+                var json = Apis.GetPlaces(Config, pageToken);
+                Console.WriteLine(json);
+                var data = JsonConvert.DeserializeObject<GoogleMapPlaceList>(json);
+                placeList.AddRange(data.Results);
+
+                pageToken = data.NextPageToken;
+                SpinWait.SpinUntil(() => false, 2000);
+            } while (!string.IsNullOrEmpty(pageToken));
+
+            for (int i = 0; i < placeList.Count; i++)
+            {
+                var placeInfo = placeList[i];
+                var json = Apis.GetPlaceDetail(Config, placeInfo.PlaceId);
+                placeList[i] = JsonConvert.DeserializeObject<GoogleMapPlace>(json);
+                SpinWait.SpinUntil(() => false, 50);
             }
 
-            return rspString;
-        }
-        static Stream GetPhoto(string photoReference, int maxWidth)
-        {
-            if (maxWidth > 1600) { maxWidth = 1600; }
-            if (maxWidth < 1) { maxWidth = 1; }
-            using (HttpClient client = new HttpClient())
-            {
-                return client.GetAsync(new Uri($"https://maps.googleapis.com/maps/api/place/photo?maxwidth={maxWidth}&photoreference={photoReference}&keyword={info.KeyWord}&key={info.Token}"))
-                    .Result
-                    .Content
-                    .ReadAsStreamAsync()
-                    .Result;
-            }
+            result += string.Join("\n", placeList);
+            File.AppendAllText(FilePath + fileName, result);
+
+            Console.WriteLine(result);
+            Console.WriteLine("Jobs Done.");
         }
     }
 }
